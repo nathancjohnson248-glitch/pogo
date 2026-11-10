@@ -27,7 +27,7 @@ function Conversation() {
         <div className="rounded-2xl border border-[#e8e3d9] bg-white p-4">
           <div className="mb-3 flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#858477]">launch watch</span><Tag>ready to monitor</Tag></div>
           <div className="grid grid-cols-3 gap-2">{[["comments","replies"],["inbox","dms"],["creators","posts"]].map(([a,b])=><div key={a} className="rounded-xl bg-[#f7f6f1] p-3"><p className="text-[11px] font-semibold">{a}</p><p className="mt-1 text-[9px] text-[#99978a]">{b}</p></div>)}</div>
-          <div className="mt-3 flex items-center gap-2 text-[10px] text-[#77786b]"><ShieldCheck size={13} className="text-[#78845d}"/> nothing goes out without your approval</div>
+          <div className="mt-3 flex items-center gap-2 text-[10px] text-[#77786b]"><ShieldCheck size={13} className="text-[#78845d]"/> nothing goes out without your approval</div>
         </div>
         {saved ? <div className="rounded-xl bg-[#edf0e7] px-4 py-3 text-[11px] text-[#626c4d]">mission brief saved. this context carries into future updates.</div> : <button onClick={()=>setSaved(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#292a24] py-3 text-[11px] font-semibold text-white transition hover:bg-[#4a4c40]">save this mission brief <ArrowRight size={13}/></button>}
       </div>
