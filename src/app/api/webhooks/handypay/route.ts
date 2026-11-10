@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/server/db";
+import { notifyPogoAdmins } from "@/lib/server/telegram";
 
 export const runtime = "nodejs";
 
@@ -26,10 +27,14 @@ export async function POST(request: NextRequest) {
   }
   if (!event.id || !event.type) return NextResponse.json({ error: "Malformed event." }, { status: 400 });
 
-  await db("pogo_webhook_events", {
+  const inserted = await db<Array<{id:string}>>("pogo_webhook_events", {
     method: "POST",
     body: { provider: "handypay", provider_event_id: event.id, event_type: event.type, payload: event, processed_at: new Date().toISOString() },
-    prefer: "return=minimal,resolution=ignore-duplicates"
+    prefer: "return=representation,resolution=ignore-duplicates"
   });
-  return NextResponse.json({ received: true });
+  if (inserted.length) {
+    try { await notifyPogoAdmins(event.type, event as unknown as Record<string, any>); }
+    catch (error) { console.error("pogo alerts delivery failed", error); }
+  }
+  return NextResponse.json({ received: true, duplicate: !inserted.length });
 }
