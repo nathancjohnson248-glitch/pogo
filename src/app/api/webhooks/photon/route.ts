@@ -119,15 +119,22 @@ export async function POST(request: NextRequest) {
   try {
     const eventRows = await db<Array<{ id: string }>>("pogo_webhook_events", {
       method: "POST",
+      query: "on_conflict=provider,provider_event_id",
       body: {
         provider: "photon",
         provider_event_id: event.id,
         event_type: event.type,
         payload: event
       },
-      prefer: "return=representation,resolution=ignore-duplicates"
+      prefer: "resolution=ignore-duplicates,return=representation"
     });
-    if (!eventRows?.length) return NextResponse.json({ received: true, duplicate: true });
+    if (!eventRows?.length) {
+      const existing = await db<Array<{ id: string; processed_at: string | null }>>("pogo_webhook_events", {
+        query: `provider=eq.photon&provider_event_id=eq.${encodeURIComponent(event.id)}&select=id,processed_at&limit=1`
+      });
+      if (existing[0]?.processed_at) return NextResponse.json({ received: true, duplicate: true });
+      if (!existing[0]) throw new Error("Photon event could not be persisted.");
+    }
 
     const platform = message.platform ?? message.space?.platform ?? "imessage";
     const user = await findOrCreatePogoUser(message.sentBy?.handle ?? senderId, senderId, platform, spaceId);
@@ -158,12 +165,14 @@ export async function POST(request: NextRequest) {
         });
       }
       await sendPhotonText(spaceId, agentUserId, "got it. i cancelled that pending action.", messageId, `pogo-reply-${messageId}`);
+      await db("pogo_webhook_events", { method: "PATCH", query: `provider=eq.photon&provider_event_id=eq.${encodeURIComponent(event.id)}`, body: { processed_at: new Date().toISOString() }, prefer: "return=minimal" });
       return NextResponse.json({ received: true });
     }
 
     if (/^approve$/i.test(body)) {
       const result = await approveLatestAction(user.id);
       await sendPhotonText(spaceId, agentUserId, result, messageId, `pogo-reply-${messageId}`);
+      await db("pogo_webhook_events", { method: "PATCH", query: `provider=eq.photon&provider_event_id=eq.${encodeURIComponent(event.id)}`, body: { processed_at: new Date().toISOString() }, prefer: "return=minimal" });
       return NextResponse.json({ received: true, approval: "processed" });
     }
 
@@ -184,6 +193,7 @@ export async function POST(request: NextRequest) {
       metadata: { photon: sent, content_type: message.content?.type ?? "unknown" }
     });
     await createActivity(user.id, "message_handled", "Pogo replied", reply.slice(0, 500));
+    await db("pogo_webhook_events", { method: "PATCH", query: `provider=eq.photon&provider_event_id=eq.${encodeURIComponent(event.id)}`, body: { processed_at: new Date().toISOString() }, prefer: "return=minimal" });
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error("Photon webhook processing failed", error);
