@@ -176,7 +176,8 @@ export async function POST(request: NextRequest) {
     const reply = await runPogoAgent({
       userId: user.id,
       message: body,
-      phone: message.sentBy?.handle ?? senderId
+      phone: message.sentBy?.handle ?? senderId,
+      providerMessageId: messageId
     });
     await sendReply(reply, { kind: "agent", content_type: message.content?.type ?? "unknown" });
     await createActivity(user.id, "message_handled", "Pogo replied", reply.slice(0, 500));

@@ -42,9 +42,28 @@ function isReadOnly(tool: ComposioTool) {
 function anthropicTools(tools: ComposioTool[]) {
   return tools.map((tool) => ({ name: tool.slug, description: tool.description.slice(0, 1800), input_schema: tool.input_schema as never }));
 }
-export async function runPogoAgent(input: { userId: string; message: string; phone: string }) {
+// The Anthropic API requires the conversation to start with a user turn and
+// roles to alternate; raw history can violate both (double texts, leading
+// assistant rows), so merge and trim before sending.
+function toConversation(history: Array<{ direction: "inbound" | "outbound"; body: string }>, current: string): Anthropic.MessageParam[] {
+  const oldestFirst = history.slice().reverse();
+  const turns: Array<{ role: "user" | "assistant"; content: string }> = [];
+  for (const item of oldestFirst) {
+    const role = item.direction === "inbound" ? "user" : "assistant";
+    const last = turns[turns.length - 1];
+    if (last && last.role === role) last.content = `${last.content}\n${item.body}`;
+    else turns.push({ role, content: item.body });
+  }
+  while (turns.length && turns[0].role !== "user") turns.shift();
+  const last = turns[turns.length - 1];
+  if (last && last.role === "user") last.content = `${last.content}\n${current}`;
+  else turns.push({ role: "user", content: current });
+  return turns;
+}
+
+export async function runPogoAgent(input: { userId: string; message: string; phone: string; providerMessageId?: string }) {
   const anthropic = getAnthropic();
-  const [memories, history, session] = await Promise.all([getRecentMemories(input.userId), getRecentMessages(input.userId), createComposioSession(input.userId)]);
+  const [memories, history, session] = await Promise.all([getRecentMemories(input.userId), getRecentMessages(input.userId, input.providerMessageId), createComposioSession(input.userId)]);
   await db("pogo_agent_sessions", {
     method: "POST",
     body: { user_id: input.userId, composio_session_id: session.session_id, last_message_at: new Date().toISOString() },
@@ -55,7 +74,7 @@ export async function runPogoAgent(input: { userId: string; message: string; pho
   const connected = discovered.connections;
   const context = memories.length ? memories.map((memory) => `- [${memory.category}] ${memory.memory}`).join("\n") : "no saved memories yet.";
   const system = `${SYSTEM_PROMPT}\n\nuser context (use only when relevant):\n${context}\n\nthe user's verified messaging phone number is ${input.phone}. treat it as identity context, not as permission to act.`;
-  const messages: Anthropic.MessageParam[] = [...history.reverse().slice(0, 20).map((item) => ({ role: item.direction === "inbound" ? "user" as const : "assistant" as const, content: item.body })), { role: "user", content: input.message }];
+  const messages: Anthropic.MessageParam[] = toConversation(history, input.message);
   for (let turn = 0; turn < 5; turn++) {
     const response = await anthropic.messages.create({
       model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5", max_tokens: 1200, system, messages,

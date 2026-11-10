@@ -57,6 +57,7 @@ export async function getRecentMemories(userId: string) {
   return db<Array<{memory:string;category:string}>>("pogo_memories", { query: `user_id=eq.${userId}&active=eq.true&select=memory,category&order=confidence.desc&limit=20` });
 }
 
-export async function getRecentMessages(userId: string) {
-  return db<Array<{direction:"inbound"|"outbound";body:string;platform:string;created_at:string}>>("pogo_messages", { query: `user_id=eq.${userId}&select=direction,body,platform,created_at&order=created_at.desc&limit=24` });
+export async function getRecentMessages(userId: string, excludeProviderMessageId?: string) {
+  const exclusion = excludeProviderMessageId ? `&provider_message_id=neq.${encodeURIComponent(excludeProviderMessageId)}` : "";
+  return db<Array<{direction:"inbound"|"outbound";body:string;platform:string;created_at:string}>>("pogo_messages", { query: `user_id=eq.${userId}${exclusion}&select=direction,body,platform,created_at&order=created_at.desc&limit=20` });
 }
