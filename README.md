@@ -2,31 +2,51 @@
 
 Pogo is a personal agent you can message to get real-world tasks handled.
 
+## Two sides of Pogo
+
+- **Pogo (iMessage):** the personal agent people message through Photon.
+- **Pogo Alerts (Telegram):** a private founder operations bot for payments, subscriptions, refunds, and business questions.
+
+Both use lowercase, natural language. The Telegram bot is owner-only and payment-changing actions require explicit confirmation.
+
 ## Stack
 
 - Next.js App Router + TypeScript
-- Tailwind CSS
+- Tailwind CSS + Framer Motion
 - Supabase for application data and backend services
 - Railway for hosting
 - Photon for messaging infrastructure
 - Anthropic for model access
 - Composio and AgentCard for connected-service actions
-- HandyPay for billing (integration to be added)
+- HandyPay for billing and signed payment webhooks
+- Telegram Bot API for private business alerts
+
+## Telegram setup
+
+Add these Railway variables:
+
+- `TELEGRAM_BOT_TOKEN` — token from BotFather
+- `TELEGRAM_WEBHOOK_SECRET` — generated server-side webhook secret
+- `POGO_ADMIN_SETUP_TOKEN` — one-time owner claim token
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only Supabase service role key
+
+After the bot token is present, register its webhook at:
+
+`https://heypogo.xyz/api/webhooks/telegram`
+
+Use the value of `TELEGRAM_WEBHOOK_SECRET` as Telegram's `secret_token`. The first owner sends `/claim YOUR_SETUP_TOKEN` to the bot. The claim is one-time; other Telegram users cannot access the private bot.
+
+Commands: `/summary`, `/sales`, `/subscriptions`, and `/refund cs_live_...`. Refund requests show a confirmation button before any refund is submitted.
+
+## HandyPay webhook
+
+Register `https://heypogo.xyz/api/webhooks/handypay` with the live HandyPay API key and subscribe to payment, invoice, subscription, refund, and dispute events. Store the endpoint signing secret in `HANDYPAY_WEBHOOK_SECRET`.
 
 ## Local development
 
 1. Install Node.js 20.9+.
-2. Install dependencies with `npm install`.
-3. Copy `.env.example` to `.env.local` and fill in the values you have.
+2. Run `npm install`.
+3. Copy `.env.example` to `.env.local` and fill in the values.
 4. Run `npm run dev`.
-5. Open http://localhost:3000.
 
-## Railway
-
-Connect this repository to a Railway service and deploy the `main` branch. Railway will detect Next.js and use the package scripts.
-
-Add secrets in Railway's Variables panel. Keep server credentials server-side: never expose provider keys through `NEXT_PUBLIC_*` variables or commit real values to Git.
-
-## Current build status
-
-The first implementation slice includes the public landing page, responsive layout, brand styling, motion, and an interactive messaging demo. Authentication, messaging webhooks, agent execution, integrations, billing, and the signed-in control center are not wired yet. Those will be added against the providers' actual API contracts rather than mocked as working features.
+Keep all server credentials private. Never commit real keys or expose them through `NEXT_PUBLIC_*` variables.
