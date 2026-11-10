@@ -63,13 +63,29 @@ function toConversation(history: Array<{ direction: "inbound" | "outbound"; body
 
 export async function runPogoAgent(input: { userId: string; message: string; phone: string; providerMessageId?: string }) {
   const anthropic = getAnthropic();
-  const [memories, history, session] = await Promise.all([getRecentMemories(input.userId), getRecentMessages(input.userId, input.providerMessageId), createComposioSession(input.userId)]);
-  await db("pogo_agent_sessions", {
-    method: "POST",
-    body: { user_id: input.userId, composio_session_id: session.session_id, last_message_at: new Date().toISOString() },
-    prefer: "resolution=merge-duplicates,return=minimal"
-  }).catch(() => null);
-  const discovered = await searchComposioTools(session.session_id, input.message);
+  // Tooling is best-effort: if the tool provider is down or misconfigured,
+  // Pogo still answers from context instead of failing the whole message.
+  const [memories, history, session] = await Promise.all([
+    getRecentMemories(input.userId),
+    getRecentMessages(input.userId, input.providerMessageId),
+    createComposioSession(input.userId).catch((error) => {
+      console.error(`composio session creation failed: ${error instanceof Error ? error.message.slice(0, 300) : "unknown"}`);
+      return null;
+    })
+  ]);
+  if (session) {
+    await db("pogo_agent_sessions", {
+      method: "POST",
+      body: { user_id: input.userId, composio_session_id: session.session_id, last_message_at: new Date().toISOString() },
+      prefer: "resolution=merge-duplicates,return=minimal"
+    }).catch(() => null);
+  }
+  const discovered = session
+    ? await searchComposioTools(session.session_id, input.message).catch((error) => {
+        console.error(`composio tool search failed: ${error instanceof Error ? error.message.slice(0, 300) : "unknown"}`);
+        return { tools: [], connections: [] };
+      })
+    : { tools: [], connections: [] };
   const tools = discovered.tools.slice(0, 18);
   const connected = discovered.connections;
   const context = memories.length ? memories.map((memory) => `- [${memory.category}] ${memory.memory}`).join("\n") : "no saved memories yet.";
@@ -87,7 +103,7 @@ export async function runPogoAgent(input: { userId: string; message: string; pho
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
     for (const block of toolUses) {
       const tool = tools.find((candidate) => candidate.slug === block.name);
-      if (!tool) {
+      if (!tool || !session) {
         toolResults.push({ type: "tool_result", tool_use_id: block.id, content: "this tool is not available in the current session.", is_error: true });
         continue;
       }

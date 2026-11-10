@@ -36,7 +36,10 @@ export async function createComposioSession(userId: string) {
     body: JSON.stringify({
       user_id: userId,
       // Request schema uses `enable`; `enabled` only appears in responses.
-      toolkits: { enable: ["gmail", "googlecalendar", "googledrive", "notion", "slack", "twitter", "tavily_mcp"] },
+      // twitter is excluded: it requires a manually created auth config in
+      // Composio (verified in production: ToolRouterV2_BadRequest 4300).
+      // Re-add it once an auth config exists in the Composio dashboard.
+      toolkits: { enable: ["gmail", "googlecalendar", "googledrive", "notion", "slack", "tavily_mcp"] },
       manage_connections: {
         enable: true,
         callback_url: "https://heypogo.xyz/connections",
