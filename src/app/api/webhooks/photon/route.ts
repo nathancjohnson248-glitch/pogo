@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Webhook } from "standardwebhooks";
 import { createActivity, db, findOrCreatePogoUser, logMessage } from "@/lib/server/db";
-import { runPogoAgent } from "@/lib/server/agent";
+import { approveLatestAction, runPogoAgent } from "@/lib/server/agent";
 import { getPhotonAgentUserId, sendPhotonText } from "@/lib/server/photon";
 
 export const runtime = "nodejs";
@@ -87,8 +87,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (/^approve$/i.test(body)) {
-      await sendPhotonText(message.space.id, getPhotonAgentUserId(), "I have your approval. The approval execution flow is being finalized, so I haven't run that action yet.");
-      return NextResponse.json({ received: true, approval: "queued" });
+      const result = await approveLatestAction(user.id);
+      await sendPhotonText(message.space.id, getPhotonAgentUserId(), result);
+      return NextResponse.json({ received: true, approval: "processed" });
     }
 
     const reply = await runPogoAgent({ userId: user.id, message: body, phone: message.sentBy.handle });
