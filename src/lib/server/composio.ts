@@ -52,7 +52,7 @@ export async function createComposioSession(userId: string) {
 export async function searchComposioTools(sessionId: string, useCase: string) {
   const result = await request<{
     results?: Array<{primary_tool_slugs?:string[];related_tool_slugs?:string[];toolkits?:string[]}>;
-    tool_schemas?: Record<string, {tool_slug?:string;description?:string;toolkit?:string;input_schema?:Record<string,unknown>;hasFullSchema?:boolean}>;
+    tool_schemas?: Record<string, {tool_slug?:string;description?:string;toolkit?:string;input_schema?:Record<string,unknown>;hasFullSchema?:boolean;tags?:string[];no_auth?:boolean}>;
     toolkit_connection_statuses?: Array<{toolkit:string;has_active_connection:boolean;status_message?:string}>;
   }>(`/tool_router/session/${sessionId}/search`, {
     method: "POST",
