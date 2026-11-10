@@ -57,8 +57,9 @@ export async function POST(request: NextRequest) {
         event_type: event.type,
         payload: event
       },
-      prefer: "return=minimal,resolution=ignore-duplicates"
+      prefer: "return=representation,resolution=ignore-duplicates"
     });
+    if (!eventRows?.length) return NextResponse.json({ received: true, duplicate: true });
 
     const user = await findOrCreatePogoUser(
       message.sentBy.handle,
