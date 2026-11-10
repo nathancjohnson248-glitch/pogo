@@ -30,8 +30,12 @@ export async function POST(request: NextRequest) {
     const result = await registerHandypayWebhook();
     return NextResponse.json({ ok: true, handypay: result });
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "unknown error";
-    console.error(`handypay webhook bootstrap failed: ${detail}`);
-    return NextResponse.json({ ok: false, error: detail }, { status: 502 });
+    // Never echo raw error internals: fetch/header errors can embed header
+    // values. Scrub anything secret-shaped before logging, return a generic
+    // message to the caller.
+    const raw = error instanceof Error ? error.message : "unknown error";
+    const scrubbed = raw.replace(/\b(hp|pho|whsec|sk)_[A-Za-z0-9_\-]+/g, "[redacted]").replace(/Bearer\s+\S+/g, "Bearer [redacted]").slice(0, 300);
+    console.error(`handypay webhook bootstrap failed: ${scrubbed}`);
+    return NextResponse.json({ ok: false, error: "HandyPay registration failed. Check server logs." }, { status: 502 });
   }
 }

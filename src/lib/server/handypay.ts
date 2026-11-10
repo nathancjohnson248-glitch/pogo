@@ -34,8 +34,17 @@ type WebhookEndpoint = {
   consecutiveFailures?: number;
 };
 
+// Environment values pasted into dashboards can pick up stray whitespace or
+// line wraps; a header value with a newline is both invalid and a leak risk.
+export function handypayApiKey(): string | null {
+  const raw = process.env.HANDYPAY_LIVE_API_KEY;
+  if (!raw) return null;
+  const key = raw.replace(/\s+/g, "");
+  return key || null;
+}
+
 async function handypay<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const key = process.env.HANDYPAY_LIVE_API_KEY;
+  const key = handypayApiKey();
   if (!key) throw new Error("HandyPay is not configured.");
   const response = await fetch(`${HANDYPAY_BASE}${path}`, {
     ...init,

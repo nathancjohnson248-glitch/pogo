@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/server/db";
+import { handypayApiKey } from "@/lib/server/handypay";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -74,7 +75,7 @@ async function salesSummary() {
   ].join("");
 }
 async function listSubscriptions() {
-  const key = process.env.HANDYPAY_LIVE_API_KEY;
+  const key = handypayApiKey();
   if (!key) return "handypay live api key is not configured yet.";
   const response = await fetch("https://api.handypay.me/api/v1/subscriptions?limit=20", {
     headers: { authorization: `Bearer ${key}` }, cache: "no-store"
@@ -123,7 +124,7 @@ async function completeRefund(chatId: number, actionId: string, confirm: boolean
     });
     return cancelled.length ? "refund cancelled. nothing was sent to handypay." : "that refund request was already handled.";
   }
-  const key = process.env.HANDYPAY_LIVE_API_KEY;
+  const key = handypayApiKey();
   if (!key) return "handypay live api key is not configured.";
   const claimed = await db<Array<{id:string}>>("pogo_admin_actions", {
     method: "PATCH",
