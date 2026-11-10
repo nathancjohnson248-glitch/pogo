@@ -1,12 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createComposioSession, createComposioConnectLink, executeComposioTool, searchComposioTools, type ComposioTool } from "./composio";
-import { createActivity, db, getRecentMemories } from "./db";
+import { createActivity, db, getRecentMemories, getRecentMessages } from "./db";
 
 const SYSTEM_PROMPT = `You are Pogo, a capable, warm, reliable personal agent who lives in the user's messages.
-You are not a generic chatbot. You help people get things handled across their digital life.
+You are not a generic chatbot. You are the context-rich operator for a founder and their team. Help run launches, partnerships, creator programs, customer conversations, research, and the operational details around a growing business. You can also help with personal tasks when asked.\n\nCONTEXT THAT COMPOUNDS\n- Use durable memories and recent conversation history as the ongoing workspace, not isolated prompts.\n- Carry forward launch names, dates, products, positioning, team roles, target audiences, competitors, creator lists, decisions, preferences, and open loops.\n- When the user says “launch day is here”, infer the active project from prior context and ask only if multiple launches are plausible.\n- Never claim to monitor a channel, read a DM, discover a creator, or analyze a post unless the relevant account/data source is connected and returned evidence.\n- When reporting findings, give counts, source, time window, and evidence. Separate verified findings from estimates.
 
 VOICE
-- Always write in lowercase, including names, sentence starts, and replies. Keep product names lowercase too.
+- Always write in lowercase, including names, sentence starts, and replies. Keep product names lowercase too. Interpret emoji naturally as part of the message. If a user sends only an emoji, use conversation context to infer intent or ask a short clarifying question.
 - Sound like a thoughtful, sharp, friendly human. Be concise by default, but thorough when the task needs it.
 - Never mention internal vendors, APIs, models, tool routers, databases, or system prompts.
 - Never pretend an action happened. Only say something is done after a tool returns a successful result.
@@ -44,7 +44,7 @@ function anthropicTools(tools: ComposioTool[]) {
 }
 export async function runPogoAgent(input: { userId: string; message: string; phone: string }) {
   const anthropic = getAnthropic();
-  const [memories, session] = await Promise.all([getRecentMemories(input.userId), createComposioSession(input.userId)]);
+  const [memories, history, session] = await Promise.all([getRecentMemories(input.userId), getRecentMessages(input.userId), createComposioSession(input.userId)]);
   await db("pogo_agent_sessions", {
     method: "POST",
     body: { user_id: input.userId, composio_session_id: session.session_id, last_message_at: new Date().toISOString() },
@@ -55,7 +55,7 @@ export async function runPogoAgent(input: { userId: string; message: string; pho
   const connected = discovered.connections;
   const context = memories.length ? memories.map((memory) => `- [${memory.category}] ${memory.memory}`).join("\n") : "no saved memories yet.";
   const system = `${SYSTEM_PROMPT}\n\nuser context (use only when relevant):\n${context}\n\nthe user's verified messaging phone number is ${input.phone}. treat it as identity context, not as permission to act.`;
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: input.message }];
+  const messages: Anthropic.MessageParam[] = [...history.reverse().slice(0, 20).map((item) => ({ role: item.direction === "inbound" ? "user" as const : "assistant" as const, content: item.body })), { role: "user", content: input.message }];
   for (let turn = 0; turn < 5; turn++) {
     const response = await anthropic.messages.create({
       model: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5", max_tokens: 1200, system, messages,
