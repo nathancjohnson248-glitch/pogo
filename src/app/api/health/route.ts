@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { createComposioSession } from "@/lib/server/composio";
 import { db } from "@/lib/server/db";
+import { hasStoredHandypaySecret } from "@/lib/server/handypay";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -16,6 +17,7 @@ function authorized(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  const handypayConfigured = Boolean(process.env.HANDYPAY_LIVE_API_KEY) && (await hasStoredHandypaySecret().catch(() => false));
   const base = {
     ok: true,
     app: "pogo",
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
       photon: Boolean(process.env.PHOTON_API_KEY && process.env.PHOTON_PROJECT_ID),
       photonWebhook: Boolean(process.env.PHOTON_WEBHOOK_SECRET),
       supabase: Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
-      handypay: Boolean(process.env.HANDYPAY_LIVE_API_KEY && process.env.HANDYPAY_WEBHOOK_SECRET),
+      handypay: handypayConfigured,
       telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN ?? process.env.TELEGRAM_BOT_API)
     }
   };

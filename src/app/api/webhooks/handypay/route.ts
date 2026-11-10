@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/server/db";
+import { getHandypayWebhookSecret } from "@/lib/server/handypay";
 import { notifyPogoAdmins } from "@/lib/server/telegram";
 
 export const runtime = "nodejs";
@@ -15,7 +16,7 @@ function validSignature(payload: string, secret: string, signature: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const secret = process.env.HANDYPAY_WEBHOOK_SECRET;
+  const secret = await getHandypayWebhookSecret();
   if (!secret) return NextResponse.json({ error: "HandyPay webhook is not configured." }, { status: 503 });
   const raw = await request.text();
   if (!validSignature(raw, secret, request.headers.get("x-handypay-signature") ?? "")) {
