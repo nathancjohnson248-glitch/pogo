@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Webhook } from "standardwebhooks";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { createActivity, db, findOrCreatePogoUser, logMessage } from "@/lib/server/db";
 import { approveLatestAction, runPogoAgent } from "@/lib/server/agent";
 import { getPhotonAgentUserId, sendPhotonText } from "@/lib/server/photon";
