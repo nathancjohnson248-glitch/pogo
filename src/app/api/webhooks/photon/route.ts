@@ -51,7 +51,7 @@ function safeEqual(a: string, b: string) {
 }
 
 function verifyPhotonSignature(rawBody: string, secret: string, signatureHeader: string, webhookId: string, timestamp: string) {
-  if (!signatureHeader || !webhookId || !timestamp || !/^\\d+$/.test(timestamp)) return false;
+  if (!signatureHeader || !webhookId || !timestamp || !/^\d+$/.test(timestamp)) return false;
   const sentAt = Number(timestamp);
   if (!Number.isFinite(sentAt) || Math.abs(Date.now() / 1000 - sentAt) > 300) return false;
 
@@ -63,7 +63,7 @@ function verifyPhotonSignature(rawBody: string, secret: string, signatureHeader:
   const expected = createHmac("sha256", key).update(signedContent).digest("base64");
 
   // Providers may include multiple versioned signatures during key rotation.
-  return signatureHeader.split(/\\s+/).some((entry) => {
+  return signatureHeader.split(/\s+/).some((entry) => {
     const [version, value] = entry.split(",", 2);
     return version === "v1" && !!value && safeEqual(value, expected);
   });
