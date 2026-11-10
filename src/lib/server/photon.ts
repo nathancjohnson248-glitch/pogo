@@ -39,6 +39,39 @@ export async function sendPhotonText(
   }, idempotencyKey);
 }
 
+export type SharedLineAssignment = {
+  assignmentId: string;
+  assignedPhoneNumber: string;
+  handle: string;
+  platform: string;
+  projectId: string;
+  createdAt: string;
+  releasedAt?: string;
+};
+
+// POST /v1/projects/{id}/platforms/imessage/assignments — assigns a number
+// from Photon's shared pool to one human handle. Idempotency key derived from
+// the handle so a double submit cannot consume two slots.
+export async function createSharedLineAssignment(handle: string, firstName?: string) {
+  return photonRequest<SharedLineAssignment>(
+    "/platforms/imessage/assignments",
+    { handle, ...(firstName ? { firstName } : {}) },
+    `pogo-assign-${handle}`
+  );
+}
+
+export async function listSharedLineAssignments(pageToken?: string) {
+  const { url, apiKey } = base();
+  const query = pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : "";
+  const response = await fetch(`${url}/platforms/imessage/assignments${query}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: "no-store"
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`Photon request failed (${response.status}): ${text.slice(0, 500)}`);
+  return JSON.parse(text) as { assignments: SharedLineAssignment[]; nextPageToken?: string };
+}
+
 export function getPhotonAgentUserId() {
   const id = process.env.PHOTON_AGENT_USER_ID;
   if (!id) throw new Error("Photon agent identity is not configured.");

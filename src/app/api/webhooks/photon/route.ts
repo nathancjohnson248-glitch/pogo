@@ -109,7 +109,21 @@ export async function POST(request: NextRequest) {
   try {
     const platform = message.platform ?? message.space?.platform ?? "imessage";
     const user = await findOrCreatePogoUser(message.sentBy?.handle ?? senderId, senderId, platform, spaceId);
-    const agentUserId = getPhotonAgentUserId();
+    // Per Photon's shared-line contract, the reply is sent as the agent
+    // identity that received this message; the env id is a fallback only.
+    const agentUserId = message.receivedBy?.id ?? getPhotonAgentUserId();
+
+    // First inbound message from a claimed handle proves ownership and
+    // activates the assignment.
+    const senderHandle = message.sentBy?.handle;
+    if (senderHandle) {
+      await db("pogo_line_assignments", {
+        method: "PATCH",
+        query: `handle=eq.${encodeURIComponent(senderHandle)}&status=eq.awaiting_first_message`,
+        body: { status: "active", activated_at: new Date().toISOString() },
+        prefer: "return=minimal"
+      }).catch(() => null);
+    }
 
     // Step 3: persist the inbound message idempotently. A retry of an event
     // that already saved this message continues instead of crashing.

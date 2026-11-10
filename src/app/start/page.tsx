@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
-import { CopyNumber, TextPogoButton } from "./start-client";
+import { ClaimForm } from "./start-client";
 
 export const metadata: Metadata = {
   title: "Meet Pogo",
-  description: "Text Pogo and start the conversation. No app, no dashboard — just iMessage."
+  description: "Get your own Pogo number and start the conversation. No app, no dashboard — just iMessage."
 };
-
-const POGO_NUMBER_DISPLAY = "+1 (628) 316-6196";
-const POGO_NUMBER_E164 = "+16283166196";
 
 export default function Start() {
   return (
@@ -33,8 +30,8 @@ export default function Start() {
 
           <div className="mt-12 border-t border-[#ded8cc]">
             {[
-              ["01", "Text the number", "Say hi, or get straight to what you're working on."],
-              ["02", "Tell it what matters", "Your product, your launch, your people. Pogo keeps the context."],
+              ["01", "Enter your number", "We reserve a dedicated Pogo number just for your phone."],
+              ["02", "Send the first text", "Your first message activates your private Pogo. It never texts first."],
               ["03", "Keep the thread going", "Come back anytime. It picks up exactly where you left off."]
             ].map(([n, title, desc]) => (
               <div key={n} className="grid grid-cols-[48px_1fr] gap-4 border-b border-[#ded8cc] py-6">
@@ -50,13 +47,8 @@ export default function Start() {
 
         <div className="lg:sticky lg:top-16">
           <div className="rounded-[2rem] border border-[#e4ded2] bg-[#fffdf8] p-8 shadow-[0_24px_80px_rgba(53,46,33,.08)] md:p-10">
-            <img src="/pogo-mascot.svg" alt="" className="h-14 w-14 rounded-2xl" />
-            <p className="mt-6 text-[10px] font-semibold uppercase tracking-[.2em] text-[#898879]">Pogo's number</p>
-            <CopyNumber display={POGO_NUMBER_DISPLAY} e164={POGO_NUMBER_E164} />
-            <TextPogoButton e164={POGO_NUMBER_E164} />
-            <p className="mt-6 text-[11px] leading-[1.8] text-[#9a988c]">
-              Works best over iMessage. Pogo only ever replies to people who message it first — it never texts you out of the blue.
-            </p>
+            <img src="/pogo-mascot.svg" alt="" className="mb-8 h-14 w-14 rounded-2xl" />
+            <ClaimForm />
           </div>
         </div>
       </section>
