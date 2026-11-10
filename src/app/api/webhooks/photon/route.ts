@@ -82,13 +82,10 @@ export async function POST(request: NextRequest) {
   if (!secret) return NextResponse.json({ error: "Photon webhook is not configured." }, { status: 503 });
 
   const rawBody = await request.text();
-  const signature = request.headers.get("x-photon-signature")
-    ?? request.headers.get("x-spectrum-signature")
-    ?? "";
-  const timestamp = request.headers.get("x-photon-timestamp")
-    ?? request.headers.get("x-spectrum-timestamp")
-    ?? "";
-  if (!verifyPhotonSignature(rawBody, secret, signature, timestamp)) {
+  const signature = request.headers.get("webhook-signature") ?? "";
+  const webhookId = request.headers.get("webhook-id") ?? "";
+  const timestamp = request.headers.get("webhook-timestamp") ?? "";
+  if (!verifyPhotonSignature(rawBody, secret, signature, webhookId, timestamp)) {
     return NextResponse.json({ error: "Invalid Photon signature." }, { status: 401 });
   }
 
@@ -155,13 +152,13 @@ export async function POST(request: NextRequest) {
           body: { status: "rejected", decided_at: new Date().toISOString() }
         });
       }
-      await sendPhotonText(spaceId, agentUserId, "got it. i cancelled that pending action.", messageId);
+      await sendPhotonText(spaceId, agentUserId, "got it. i cancelled that pending action.", messageId, `pogo-reply-${messageId}`);
       return NextResponse.json({ received: true });
     }
 
     if (/^approve$/i.test(body)) {
       const result = await approveLatestAction(user.id);
-      await sendPhotonText(spaceId, agentUserId, result, messageId);
+      await sendPhotonText(spaceId, agentUserId, result, messageId, `pogo-reply-${messageId}`);
       return NextResponse.json({ received: true, approval: "processed" });
     }
 
@@ -170,7 +167,7 @@ export async function POST(request: NextRequest) {
       message: body,
       phone: message.sentBy?.handle ?? senderId
     });
-    const sent = await sendPhotonText(spaceId, agentUserId, reply, messageId);
+    const sent = await sendPhotonText(spaceId, agentUserId, reply, messageId, `pogo-reply-${messageId}`);
     await logMessage({
       userId: user.id,
       providerMessageId: `pogo-${messageId}`,
