@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   description: "Your personal agent that gets things done. Message Pogo, then get on with your day.",
   metadataBase: new URL("https://heypogo.xyz"),
   icons: {
-    icon: [{ url: "/pogo-icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/pogo-icon.svg", type: "image/svg+xml" }]
+    icon: [{ url: "/pogo-mascot.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/pogo-mascot.svg", type: "image/svg+xml" }]
   },
   openGraph: {
     title: "Pogo — Get it handled",
@@ -15,13 +15,13 @@ export const metadata: Metadata = {
     url: "https://heypogo.xyz",
     siteName: "Pogo",
     type: "website",
-    images: [{ url: "/pogo-icon.svg", width: 512, height: 512, alt: "Pogo" }]
+    images: [{ url: "/pogo-mascot.svg", width: 512, height: 512, alt: "Pogo mascot" }]
   },
   twitter: {
     card: "summary",
     title: "Pogo — Get it handled",
     description: "Your personal agent that gets things done.",
-    images: ["/pogo-icon.svg"]
+    images: ["/pogo-mascot.svg"]
   }
 };
 
