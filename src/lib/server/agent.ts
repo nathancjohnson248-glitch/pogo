@@ -44,7 +44,7 @@ function anthropicTools(tools: ComposioTool[]) {
   return tools.map((tool) => ({
     name: tool.slug,
     description: tool.description.slice(0, 1800),
-    input_schema: tool.input_schema as Anthropic.Tool.InputSchema
+    input_schema: tool.input_schema as never
   }));
 }
 
@@ -89,7 +89,7 @@ export async function runPogoAgent(input: {
 
     if (!toolUses.length) return text || "I'm here. What would you like me to handle?";
 
-    messages.push({ role: "assistant", content: response.content });
+    messages.push({ role: "assistant", content: response.content as never });
 
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
     for (const block of toolUses) {
@@ -140,8 +140,8 @@ export async function runPogoAgent(input: {
 
 
 export async function approveLatestAction(userId: string) {
-  const pending = await db<Array<{id:string;tool_slug:string;tool_arguments:Record<string,unknown>;description:string}>>("pogo_approvals", {
-    query: `user_id=eq.${userId}&status=eq.pending&select=id,tool_slug,tool_arguments,description&order=created_at.desc&limit=1`
+  const pending = await db<Array<{id:string;tool_slug:string;tool_arguments:Record<string,unknown>;description:string;expires_at:string|null}>>("pogo_approvals", {
+    query: `user_id=eq.${userId}&status=eq.pending&select=id,tool_slug,tool_arguments,description,expires_at&order=created_at.desc&limit=1`
   });
   const approval = pending[0];
   if (!approval) return "There isn't a pending action waiting for approval.";
