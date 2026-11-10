@@ -1,7 +1,7 @@
 import { db } from "./db";
 
 async function telegram(method: string, body: Record<string, unknown>) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = process.env.TELEGRAM_BOT_TOKEN ?? process.env.TELEGRAM_BOT_API;
   if (!token) return;
   const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), cache: "no-store"

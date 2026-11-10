@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
 
   const inserted = await db<Array<{id:string}>>("pogo_webhook_events", {
     method: "POST",
+    query: "on_conflict=provider,provider_event_id&select=id",
     body: { provider: "handypay", provider_event_id: event.id, event_type: event.type, payload: event, processed_at: new Date().toISOString() },
     prefer: "return=representation,resolution=ignore-duplicates"
   });

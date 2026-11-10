@@ -30,8 +30,23 @@ export async function findOrCreatePogoUser(phone: string | null, photonUserId: s
   return created[0];
 }
 
+// Idempotent by provider_message_id: replaying the same provider message is a
+// no-op instead of a unique-constraint violation. Returns the inserted row, or
+// an empty array when the message was already persisted.
 export async function logMessage(input: { userId: string; providerMessageId: string; spaceId: string; direction: "inbound" | "outbound"; platform: string; body: string; status?: string; metadata?: Record<string, unknown> }) {
-  return db("pogo_messages", { method: "POST", body: { user_id: input.userId, provider_message_id: input.providerMessageId, space_id: input.spaceId, direction: input.direction, platform: input.platform, body: input.body, status: input.status ?? "received", metadata: input.metadata ?? {} }, prefer: "return=minimal,resolution=ignore-duplicates" });
+  return db<Array<{ id: string }>>("pogo_messages", {
+    method: "POST",
+    query: "on_conflict=provider_message_id&select=id",
+    body: { user_id: input.userId, provider_message_id: input.providerMessageId, space_id: input.spaceId, direction: input.direction, platform: input.platform, body: input.body, status: input.status ?? "received", metadata: input.metadata ?? {} },
+    prefer: "return=representation,resolution=ignore-duplicates"
+  });
+}
+
+export async function findMessageByProviderId(providerMessageId: string) {
+  const rows = await db<Array<{ id: string; direction: string; status: string }>>("pogo_messages", {
+    query: `provider_message_id=eq.${encodeURIComponent(providerMessageId)}&select=id,direction,status&limit=1`
+  });
+  return rows[0] ?? null;
 }
 
 export async function createActivity(userId: string, kind: string, title: string, detail?: string, missionId?: string) {

@@ -35,15 +35,14 @@ export async function createComposioSession(userId: string) {
     method: "POST",
     body: JSON.stringify({
       user_id: userId,
+      // Request schema uses `enable`; `enabled` only appears in responses.
       toolkits: { enable: ["gmail", "googlecalendar", "googledrive", "notion", "slack", "twitter", "tavily_mcp"] },
       manage_connections: {
-        enabled: true,
+        enable: true,
         callback_url: "https://heypogo.xyz/connections",
         enable_wait_for_connections: false,
         enable_connection_removal: true
-      },
-      search: { enable: true },
-      execute: { enable_multi_execute: true },
+      }
     })
   });
 }
