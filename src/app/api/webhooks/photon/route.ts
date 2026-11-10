@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
   if (!body) return NextResponse.json({ received: true, ignored: true });
 
   try {
-    await db("pogo_webhook_events", {
+    const eventRows = await db<Array<{id:string}>>("pogo_webhook_events", {
       method: "POST",
       body: {
         provider: "photon",
