@@ -223,11 +223,18 @@ export async function POST(request: NextRequest) {
       }
     } else if (update.message) {
       await handleMessage(update.message);
+    } else if (update.message_reaction) {
+      const reaction = update.message_reaction;
+      const actorId = reaction.user?.id;
+      if (actorId && await isAdmin(reaction.chat.id, actorId)) {
+        const emoji = (reaction.new_reaction ?? []).map((item) => item.emoji ?? item.type).join(" ") || "removed reaction";
+        await send(reaction.chat.id, "i saw your reaction " + esc(emoji) + " on message #" + reaction.message_id + ".");
+      }
     }
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("pogo alerts webhook failed", error);
-    const chatId = update.message?.chat.id ?? update.callback_query?.message?.chat.id;
+    const chatId = update.message?.chat.id ?? update.callback_query?.message?.chat.id ?? update.message_reaction?.chat.id;
     if (chatId) await send(chatId, "something went wrong on my side. nothing will be marked as complete until i can verify it.").catch(() => null);
     return NextResponse.json({ ok: true });
   }
