@@ -7,34 +7,74 @@ import { getPhotonAgentUserId, sendPhotonText } from "@/lib/server/photon";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-type SpectrumMessage = {
+type PhotonContent = {
+  type?: string;
+  text?: string;
+  reaction?: string;
+  attachmentId?: string;
+  metadata?: Record<string, unknown>;
+  parts?: PhotonContent[];
+  question?: string;
+  options?: Array<{ id?: string; text?: string; title?: string }>;
+  selectedOptions?: Array<{ id?: string; text?: string; title?: string }>;
+};
+
+type PhotonUser = { id?: string; handle?: string; platform?: string };
+type PhotonSpace = { id?: string; platform?: string };
+type PhotonMessage = {
   id?: string;
+  projectId?: string;
   platform?: string;
-  direction?: "inbound" | "outbound";
-  sender?: { id?: string; platform?: string };
-  content?: { type?: string; text?: string; markdown?: string; emoji?: string; target?: { id?: string; content?: { text?: string } }; name?: string; mimeType?: string; duration?: number; url?: string; title?: string; items?: Array<{ type?: string; text?: string; name?: string; mimeType?: string; emoji?: string }> };
-  space?: { id?: string; platform?: string };
+  status?: string;
+  sentBy?: PhotonUser;
+  receivedBy?: PhotonUser;
+  addressedTo?: PhotonUser;
+  space?: PhotonSpace;
+  content?: PhotonContent;
+  parentMessageId?: string;
+  createdAt?: string;
 };
 
-type SpectrumEvent = {
-  event?: string;
-  space?: { id?: string; platform?: string };
-  message?: SpectrumMessage;
+type PhotonEvent = {
+  id?: string;
+  type?: string;
+  apiVersion?: string;
+  source?: string;
+  timestamp?: string;
+  data?: { projectId?: string; object?: PhotonMessage };
 };
 
-function verifySpectrumSignature(rawBody: string, secret: string, signature: string, timestamp: string) {
-  if (!signature || !timestamp || !/^\d+$/.test(timestamp)) return false;
-  const sentAt = Number(timestamp);
-  if (!Number.isFinite(sentAt) || Math.abs(Date.now() / 1000 - sentAt) > 300) return false;
-  const expected = `v0=${createHmac("sha256", secret).update(`v0:${timestamp}:${rawBody}`).digest("hex")}`;
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
+function safeEqual(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
-function messageText(message: SpectrumMessage) {
-  if (message.content?.type === "text" && message.content.text) return message.content.text;
-  return message.content?.items?.filter((item) => item.type === "text").map((item) => item.text ?? "").join("\n") ?? "";
+function verifyPhotonSignature(rawBody: string, secret: string, signature: string, timestamp: string) {
+  if (!signature) return false;
+  if (timestamp && /^\d+$/.test(timestamp)) {
+    const sentAt = Number(timestamp);
+    if (!Number.isFinite(sentAt) || Math.abs(Date.now() / 1000 - sentAt) > 300) return false;
+    const timestamped = `v0=${createHmac("sha256", secret).update(`v0:${timestamp}:${rawBody}`).digest("hex")}`;
+    if (safeEqual(signature, timestamped)) return true;
+  }
+  // Also accept Photon destinations that sign the raw body directly.
+  const rawDigest = createHmac("sha256", secret).update(rawBody).digest("hex");
+  return safeEqual(signature, rawDigest) || safeEqual(signature, `sha256=${rawDigest}`);
+}
+
+function contentText(content?: PhotonContent): string {
+  if (!content) return "";
+  if (content.type === "text") return content.text ?? "";
+  if (content.type === "group") return (content.parts ?? []).map(contentText).filter(Boolean).join("\n");
+  if (content.type === "reaction") return content.reaction ? `[reaction: ${content.reaction}]` : "[reaction received]";
+  if (content.type === "voice") return "[voice message received]";
+  if (content.type === "attachment") return "[attachment received]";
+  if (content.type === "poll") return `[poll: ${content.question ?? "question"}]`;
+  if (content.type === "poll.vote") return "[poll vote received]";
+  if (content.type === "message.update") return content.text ?? "[message update received]";
+  if (content.type) return `[${content.type} received]`;
+  return "";
 }
 
 export async function POST(request: NextRequest) {
@@ -42,27 +82,36 @@ export async function POST(request: NextRequest) {
   if (!secret) return NextResponse.json({ error: "Photon webhook is not configured." }, { status: 503 });
 
   const rawBody = await request.text();
-  const signature = request.headers.get("x-spectrum-signature") ?? "";
-  const timestamp = request.headers.get("x-spectrum-timestamp") ?? "";
-  if (!verifySpectrumSignature(rawBody, secret, signature, timestamp)) {
+  const signature = request.headers.get("x-photon-signature")
+    ?? request.headers.get("x-spectrum-signature")
+    ?? "";
+  const timestamp = request.headers.get("x-photon-timestamp")
+    ?? request.headers.get("x-spectrum-timestamp")
+    ?? "";
+  if (!verifyPhotonSignature(rawBody, secret, signature, timestamp)) {
     return NextResponse.json({ error: "Invalid Photon signature." }, { status: 401 });
   }
 
-  let event: SpectrumEvent;
-  try { event = JSON.parse(rawBody) as SpectrumEvent; } catch {
+  let event: PhotonEvent;
+  try {
+    event = JSON.parse(rawBody) as PhotonEvent;
+  } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  if (event.event !== "messages") return NextResponse.json({ received: true, ignored: true });
-  const message = event.message;
-  const spaceId = event.space?.id ?? message?.space?.id;
-  const senderId = message?.sender?.id;
-  if (!message?.id || !spaceId || !senderId) {
-    return NextResponse.json({ error: "Message event is missing sender, space, or message ID." }, { status: 400 });
+  if (event.type !== "message.received") {
+    return NextResponse.json({ received: true, ignored: true });
   }
-  if (message.direction !== "inbound") return NextResponse.json({ received: true, ignored: true });
 
-  const body = messageText(message).trim();
+  const message = event.data?.object;
+  const spaceId = message?.space?.id;
+  const senderId = message?.sentBy?.id;
+  const messageId = message?.id;
+  if (!messageId || !spaceId || !senderId || !event.id) {
+    return NextResponse.json({ error: "Photon message event is missing its event, sender, space, or message ID." }, { status: 400 });
+  }
+
+  const body = contentText(message.content).trim();
   if (!body) return NextResponse.json({ received: true, ignored: true });
 
   try {
@@ -70,50 +119,61 @@ export async function POST(request: NextRequest) {
       method: "POST",
       body: {
         provider: "photon",
-        provider_event_id: message.id,
-        event_type: event.event,
+        provider_event_id: event.id,
+        event_type: event.type,
         payload: event
       },
       prefer: "return=representation,resolution=ignore-duplicates"
     });
     if (!eventRows?.length) return NextResponse.json({ received: true, duplicate: true });
 
-    const platform = message.platform ?? event.space?.platform ?? "imessage";
-    const user = await findOrCreatePogoUser(senderId, senderId, platform, spaceId);
+    const platform = message.platform ?? message.space?.platform ?? "imessage";
+    const user = await findOrCreatePogoUser(message.sentBy?.handle ?? senderId, senderId, platform, spaceId);
     const agentUserId = getPhotonAgentUserId();
     await logMessage({
       userId: user.id,
-      providerMessageId: message.id,
+      providerMessageId: messageId,
       spaceId,
       direction: "inbound",
       platform,
-      body
+      body,
+      metadata: {
+        photon_event_id: event.id,
+        content_type: message.content?.type ?? "unknown",
+        attachment_id: message.content?.attachmentId ?? null
+      }
     });
 
     if (/^cancel$/i.test(body)) {
       const pending = await db<Array<{ id: string }>>("pogo_approvals", {
         query: `user_id=eq.${user.id}&status=eq.pending&select=id&order=created_at.desc&limit=1`
       });
-      if (pending[0]) await db("pogo_approvals", {
-        method: "PATCH",
-        query: `id=eq.${pending[0].id}`,
-        body: { status: "rejected", decided_at: new Date().toISOString() }
-      });
-      await sendPhotonText(spaceId, agentUserId, "Got it. I cancelled that pending action.", message.id);
+      if (pending[0]) {
+        await db("pogo_approvals", {
+          method: "PATCH",
+          query: `id=eq.${pending[0].id}`,
+          body: { status: "rejected", decided_at: new Date().toISOString() }
+        });
+      }
+      await sendPhotonText(spaceId, agentUserId, "got it. i cancelled that pending action.", messageId);
       return NextResponse.json({ received: true });
     }
 
     if (/^approve$/i.test(body)) {
       const result = await approveLatestAction(user.id);
-      await sendPhotonText(spaceId, agentUserId, result, message.id);
+      await sendPhotonText(spaceId, agentUserId, result, messageId);
       return NextResponse.json({ received: true, approval: "processed" });
     }
 
-    const reply = await runPogoAgent({ userId: user.id, message: body, phone: senderId });
-    const sent = await sendPhotonText(spaceId, agentUserId, reply, message.id);
+    const reply = await runPogoAgent({
+      userId: user.id,
+      message: body,
+      phone: message.sentBy?.handle ?? senderId
+    });
+    const sent = await sendPhotonText(spaceId, agentUserId, reply, messageId);
     await logMessage({
       userId: user.id,
-      providerMessageId: `pogo-${message.id}`,
+      providerMessageId: `pogo-${messageId}`,
       spaceId,
       direction: "outbound",
       platform,
