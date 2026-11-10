@@ -8,7 +8,9 @@ export const maxDuration = 30;
 
 type TgUser = { id: number; username?: string; first_name?: string };
 type TgChat = { id: number; type?: string };
-type TgSticker = { file_id: string; emoji?: string; set_name?: string; is_animated?: boolean; is_video?: boolean };\ntype TgMessage = { message_id: number; chat: TgChat; from?: TgUser; text?: string; caption?: string; sticker?: TgSticker; photo?: Array<{file_id:string}>; video?: {file_id:string}; animation?: {file_id:string}; document?: {file_id:string;mime_type?:string}; voice?: {file_id:string;duration:number}; audio?: {file_id:string;duration:number}; };\ntype TgReactionUpdate = { chat: TgChat; user?: TgUser; actor_chat?: TgChat; message_id:number; old_reaction?:Array<{type:string;emoji?:string}>; new_reaction?:Array<{type:string;emoji?:string}> };
+type TgSticker = { file_id: string; emoji?: string; set_name?: string; is_animated?: boolean; is_video?: boolean };
+type TgMessage = { message_id: number; chat: TgChat; from?: TgUser; text?: string; caption?: string; sticker?: TgSticker; photo?: Array<{file_id:string}>; video?: {file_id:string}; animation?: {file_id:string}; document?: {file_id:string;mime_type?:string}; voice?: {file_id:string;duration:number}; audio?: {file_id:string;duration:number}; };
+type TgReactionUpdate = { chat: TgChat; user?: TgUser; actor_chat?: TgChat; message_id:number; old_reaction?:Array<{type:string;emoji?:string}>; new_reaction?:Array<{type:string;emoji?:string}> };
 type TgCallback = { id: string; from: TgUser; data?: string; message?: TgMessage };
 type TgUpdate = { update_id: number; message?: TgMessage; callback_query?: TgCallback; message_reaction?: TgReactionUpdate };
 
