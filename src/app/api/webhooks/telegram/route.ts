@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/server/db";
-import { notifyPogoAdmins } from "@/lib/server/telegram";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
