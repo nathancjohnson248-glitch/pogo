@@ -160,7 +160,8 @@ async function askPogo(question: string) {
 async function handleMessage(message: TgMessage) {
   const chatId = message.chat.id;
   const user = message.from;
-  const mediaNote = message.sticker ? `\n[sticker${message.sticker.emoji ? ` ${message.sticker.emoji}` : ""}${message.sticker.set_name ? ` from ${message.sticker.set_name}` : ""}${message.sticker.is_animated ? ", animated" : message.sticker.is_video ? ", video sticker" : ""}]` : message.photo ? "\n[photo attached]" : message.video ? "\n[video attached]" : message.animation ? "\n[animation attached]" : message.voice ? `\n[voice note, ${message.voice.duration}s]` : message.audio ? `\n[audio attached, ${message.audio.duration}s]` : message.document ? `\n[file attached${message.document.mime_type ? `, ${message.document.mime_type}` : ""}]` : "";\n  const text = (message.text ?? message.caption ?? "").trim() + mediaNote;
+  const mediaNote = message.sticker ? `\n[sticker${message.sticker.emoji ? ` ${message.sticker.emoji}` : ""}${message.sticker.set_name ? ` from ${message.sticker.set_name}` : ""}${message.sticker.is_animated ? ", animated" : message.sticker.is_video ? ", video sticker" : ""}]` : message.photo ? "\n[photo attached]" : message.video ? "\n[video attached]" : message.animation ? "\n[animation attached]" : message.voice ? `\n[voice note, ${message.voice.duration}s]` : message.audio ? `\n[audio attached, ${message.audio.duration}s]` : message.document ? `\n[file attached${message.document.mime_type ? `, ${message.document.mime_type}` : ""}]` : "";
+  const text = (message.text ?? message.caption ?? "").trim() + mediaNote;
   if (!user || message.chat.type !== "private") return;
   if (text.startsWith("/claim ")) {
     const token = text.slice(7).trim();
