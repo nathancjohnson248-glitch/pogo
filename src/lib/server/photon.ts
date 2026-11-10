@@ -7,14 +7,14 @@ const base = () => {
   return { url: `https://api.photon.codes/v1/projects/${projectId}`, apiKey };
 }
 
-export async function photonRequest<T>(path: string, body: unknown): Promise<T> {
+export async function photonRequest<T>(path: string, body: unknown, idempotencyKey?: string): Promise<T> {
   const { url, apiKey } = base();
   const response = await fetch(`${url}${path}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
-      "Idempotency-Key": randomUUID()
+      "Idempotency-Key": idempotencyKey ?? randomUUID()
     },
     body: JSON.stringify(body),
     cache: "no-store"
@@ -24,7 +24,7 @@ export async function photonRequest<T>(path: string, body: unknown): Promise<T> 
   return (text ? JSON.parse(text) : null) as T;
 }
 
-export async function sendPhotonText(spaceId: string, senderId: string, text: string) {
+export async function sendPhotonText(spaceId: string, senderId: string, text: string, idempotencyKey?: string) {
   return photonRequest("/messages", {
     spaceId,
     senderId,
