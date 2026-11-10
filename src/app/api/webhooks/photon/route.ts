@@ -50,19 +50,24 @@ function safeEqual(a: string, b: string) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
-function verifyPhotonSignature(rawBody: string, secret: string, signature: string, timestamp: string) {
-  if (!signature) return false;
-  if (timestamp && /^\d+$/.test(timestamp)) {
-    const sentAt = Number(timestamp);
-    if (!Number.isFinite(sentAt) || Math.abs(Date.now() / 1000 - sentAt) > 300) return false;
-    const timestamped = `v0=${createHmac("sha256", secret).update(`v0:${timestamp}:${rawBody}`).digest("hex")}`;
-    if (safeEqual(signature, timestamped)) return true;
-  }
-  // Also accept Photon destinations that sign the raw body directly.
-  const rawDigest = createHmac("sha256", secret).update(rawBody).digest("hex");
-  return safeEqual(signature, rawDigest) || safeEqual(signature, `sha256=${rawDigest}`);
-}
+function verifyPhotonSignature(rawBody: string, secret: string, signatureHeader: string, webhookId: string, timestamp: string) {
+  if (!signatureHeader || !webhookId || !timestamp || !/^\\d+$/.test(timestamp)) return false;
+  const sentAt = Number(timestamp);
+  if (!Number.isFinite(sentAt) || Math.abs(Date.now() / 1000 - sentAt) > 300) return false;
 
+  // Standard Webhooks secrets are base64-encoded and prefixed with whsec_.
+  const key = secret.startsWith("whsec_")
+    ? Buffer.from(secret.slice(6), "base64")
+    : Buffer.from(secret, "utf8");
+  const signedContent = `${webhookId}.${timestamp}.${rawBody}`;
+  const expected = createHmac("sha256", key).update(signedContent).digest("base64");
+
+  // Providers may include multiple versioned signatures during key rotation.
+  return signatureHeader.split(/\\s+/).some((entry) => {
+    const [version, value] = entry.split(",", 2);
+    return version === "v1" && !!value && safeEqual(value, expected);
+  });
+}
 function contentText(content?: PhotonContent): string {
   if (!content) return "";
   if (content.type === "text") return content.text ?? "";
