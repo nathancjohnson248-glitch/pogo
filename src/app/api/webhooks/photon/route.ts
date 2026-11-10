@@ -13,7 +13,7 @@ type PhotonMessage = {
   status?: string;
   content?: { type?: string; text?: string; parts?: Array<{type?:string;text?:string}> };
   space?: { id?: string };
-  sentBy?: { id?: string; handle?: string };
+  sentBy?: { id?: string; handle?: string };\n  receivedBy?: { id?: string; handle?: string };
 };
 
 function messageText(message: PhotonMessage) {
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   }
   if (message.status && message.status !== "received") return NextResponse.json({ received: true, ignored: true });
 
-  const body = messageText(message).trim();
+  const agentUserId = message.receivedBy?.id ?? getPhotonAgentUserId();\n  const body = messageText(message).trim();
   if (!body) return NextResponse.json({ received: true, ignored: true });
 
   try {
@@ -83,18 +83,18 @@ export async function POST(request: NextRequest) {
       if (pending[0]) await db("pogo_approvals", {
         method: "PATCH", query: `id=eq.${pending[0].id}`, body: { status: "rejected", decided_at: new Date().toISOString() }
       });
-      await sendPhotonText(message.space.id, getPhotonAgentUserId(), "Got it. I cancelled that pending action.");
+      await sendPhotonText(message.space.id, agentUserId, "Got it. I cancelled that pending action.", message.id);
       return NextResponse.json({ received: true });
     }
 
     if (/^approve$/i.test(body)) {
       const result = await approveLatestAction(user.id);
-      await sendPhotonText(message.space.id, getPhotonAgentUserId(), result);
+      await sendPhotonText(message.space.id, agentUserId, result, message.id);
       return NextResponse.json({ received: true, approval: "processed" });
     }
 
     const reply = await runPogoAgent({ userId: user.id, message: body, phone: message.sentBy.handle });
-    const sent = await sendPhotonText(message.space.id, getPhotonAgentUserId(), reply);
+    const sent = await sendPhotonText(message.space.id, agentUserId, reply, message.id);
     await logMessage({
       userId: user.id,
       providerMessageId: `pogo-${message.id}`,
