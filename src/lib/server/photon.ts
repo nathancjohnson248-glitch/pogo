@@ -5,7 +5,7 @@ const base = () => {
   const apiKey = process.env.PHOTON_API_KEY;
   if (!projectId || !apiKey) throw new Error("Photon is not configured.");
   return { url: `https://api.photon.codes/v1/projects/${projectId}`, apiKey };
-}
+};
 
 export async function photonRequest<T>(path: string, body: unknown, idempotencyKey?: string): Promise<T> {
   const { url, apiKey } = base();
@@ -24,16 +24,23 @@ export async function photonRequest<T>(path: string, body: unknown, idempotencyK
   return (text ? JSON.parse(text) : null) as T;
 }
 
-export async function sendPhotonText(spaceId: string, senderId: string, text: string, idempotencyKey?: string) {
+export async function sendPhotonText(
+  spaceId: string,
+  senderId: string,
+  text: string,
+  parentMessageId?: string,
+  idempotencyKey?: string
+) {
   return photonRequest("/messages", {
     spaceId,
     senderId,
+    ...(parentMessageId ? { parentMessageId } : {}),
     content: { type: "text", format: "plain", text }
-  });
+  }, idempotencyKey);
 }
 
 export function getPhotonAgentUserId() {
   const id = process.env.PHOTON_AGENT_USER_ID;
-  if (!id) throw new Error("Add PHOTON_AGENT_USER_ID from your Pogo agent identity in Photon.");
+  if (!id) throw new Error("Photon agent identity is not configured.");
   return id;
 }
