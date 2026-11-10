@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { createComposioSession, executeComposioTool, searchComposioTools, type ComposioTool } from "./composio";
+import { createComposioSession, createComposioConnectLink, executeComposioTool, searchComposioTools, type ComposioTool } from "./composio";
 import { createActivity, db, getRecentMemories } from "./db";
 
 const SYSTEM_PROMPT = `You are Pogo, a capable, warm, reliable personal agent who lives in the user's messages.
@@ -37,7 +37,7 @@ function getAnthropic() {
 }
 
 function isReadOnly(tool: ComposioTool) {
-  return tool.tags?.includes("readOnlyHint") ?? false;
+  return tool.tags?.includes("readOnlyHint") ?? /(^|_)(GET|FETCH|SEARCH|LIST|FIND|READ|LOOKUP|QUERY|EXPORT|DOWNLOAD|RETRIEVE|CHECK|VERIFY)(_|$)/i.test(tool.slug);
 }
 
 function anthropicTools(tools: ComposioTool[]) {
@@ -99,6 +99,12 @@ export async function runPogoAgent(input: {
         continue;
       }
 
+      const connection = connected.find((item) => item.toolkit.toLowerCase() === tool.toolkit.toLowerCase());
+      if (connection && !connection.has_active_connection && !tool.no_auth) {
+        const link = await createComposioConnectLink(session.session_id, tool.toolkit);
+        return `To do that, I need you to connect ${tool.toolkit}. Open this secure link, finish the sign-in, then message me again: ${link.redirect_url}`;
+      }
+
       if (!isReadOnly(tool)) {
         const approvals = await db<Array<{id:string}>>("pogo_approvals", {
           method: "POST",
@@ -130,4 +136,25 @@ export async function runPogoAgent(input: {
   }
 
   return "I made some progress, but I couldn't safely finish the whole request in one pass. Tell me which part you want me to continue with.";
+}
+
+
+export async function approveLatestAction(userId: string) {
+  const pending = await db<Array<{id:string;tool_slug:string;tool_arguments:Record<string,unknown>;description:string}>>("pogo_approvals", {
+    query: `user_id=eq.${userId}&status=eq.pending&select=id,tool_slug,tool_arguments,description&order=created_at.desc&limit=1`
+  });
+  const approval = pending[0];
+  if (!approval) return "There isn't a pending action waiting for approval.";
+
+  const session = await createComposioSession(userId);
+  const result = await executeComposioTool(session.session_id, approval.tool_slug, approval.tool_arguments);
+  const succeeded = result.result_type === "completed" && !result.error;
+  await db("pogo_approvals", {
+    method: "PATCH",
+    query: `id=eq.${approval.id}`,
+    body: { status: succeeded ? "executed" : "rejected", decided_at: new Date().toISOString() }
+  });
+  await createActivity(userId, succeeded ? "action_completed" : "action_failed", succeeded ? "Approved action completed" : "Approved action failed", approval.description);
+  if (!succeeded) return "I tried the approved action, but the connected service did not complete it. Nothing is being reported as done. I can try again after we check the connection.";
+  return "Done. The approved action completed successfully.";
 }
