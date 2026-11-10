@@ -230,3 +230,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 }
+
+export async function GET(request: NextRequest) {
+  const key = request.nextUrl.searchParams.get("key") ?? "";
+  const expected = process.env.POGO_ADMIN_SETUP_TOKEN ?? "";
+  if (!expected || !safeEqual(key, expected)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_WEBHOOK_SECRET) {
+    return NextResponse.json({ error: "add TELEGRAM_BOT_TOKEN to Railway first" }, { status: 503 });
+  }
+  try {
+    const result = await tg("setWebhook", {
+      url: "https://heypogo.xyz/api/webhooks/telegram",
+      secret_token: process.env.TELEGRAM_WEBHOOK_SECRET,
+      allowed_updates: ["message", "callback_query"],
+      drop_pending_updates: false
+    });
+    return NextResponse.json({ ok: true, webhook: result, next: "open your bot and send /claim with the owner setup token" });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "could not register telegram webhook" }, { status: 502 });
+  }
+}
