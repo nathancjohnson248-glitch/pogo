@@ -12,7 +12,7 @@ type SpectrumMessage = {
   platform?: string;
   direction?: "inbound" | "outbound";
   sender?: { id?: string; platform?: string };
-  content?: { type?: string; text?: string; items?: Array<{ type?: string; text?: string }> };
+  content?: { type?: string; text?: string; markdown?: string; emoji?: string; target?: { id?: string; content?: { text?: string } }; name?: string; mimeType?: string; duration?: number; url?: string; title?: string; items?: Array<{ type?: string; text?: string; name?: string; mimeType?: string; emoji?: string }> };
   space?: { id?: string; platform?: string };
 };
 
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
       platform,
       body: reply,
       status: "sent",
-      metadata: { photon: sent }
+      metadata: { photon: sent, content_type: message.content?.type ?? "unknown" }
     });
     await createActivity(user.id, "message_handled", "Pogo replied", reply.slice(0, 500));
     return NextResponse.json({ received: true });
