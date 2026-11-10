@@ -44,7 +44,6 @@ export async function createComposioSession(userId: string) {
       },
       search: { enable: true },
       execute: { enable_multi_execute: true },
-      workbench: { enable: true, enable_proxy_execution: false }
     })
   });
 }
@@ -63,8 +62,10 @@ export async function searchComposioTools(sessionId: string, useCase: string) {
     tools: schemas.map((item) => ({
       slug: item.tool_slug!,
       description: item.description ?? item.tool_slug!,
-      toolkit: item.toolkit ?? item.tool_slug!.split("_")[0].toLowerCase(),
-      input_schema: item.input_schema!
+      toolkit: (item.toolkit ?? item.tool_slug!.split("_")[0]).toLowerCase(),
+      input_schema: item.input_schema!,
+      tags: item.tags,
+      no_auth: item.no_auth
     })),
     connections: result.toolkit_connection_statuses ?? []
   };
