@@ -35,9 +35,9 @@ export async function createComposioSession(userId: string) {
     method: "POST",
     body: JSON.stringify({
       user_id: userId,
-      toolkits: { enabled: ["gmail", "googlecalendar", "googledrive", "notion", "slack", "twitter", "tavily_mcp"] },
+      toolkits: { enable: ["gmail", "googlecalendar", "googledrive", "notion", "slack", "twitter", "tavily_mcp"] },
       manage_connections: {
-        enable: true,
+        enabled: true,
         callback_url: "https://heypogo.xyz/connections",
         enable_wait_for_connections: false,
         enable_connection_removal: true
