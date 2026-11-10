@@ -7,18 +7,34 @@ import { getPhotonAgentUserId, sendPhotonText } from "@/lib/server/photon";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-type PhotonMessage = {
+type SpectrumMessage = {
   id?: string;
   platform?: string;
-  status?: string;
-  content?: { type?: string; text?: string; parts?: Array<{type?:string;text?:string}> };
-  space?: { id?: string };
-  sentBy?: { id?: string; handle?: string };\n  receivedBy?: { id?: string; handle?: string };
+  direction?: "inbound" | "outbound";
+  sender?: { id?: string; platform?: string };
+  content?: { type?: string; text?: string; items?: Array<{ type?: string; text?: string }> };
+  space?: { id?: string; platform?: string };
 };
 
-function messageText(message: PhotonMessage) {
-  if (message.content?.text) return message.content.text;
-  return message.content?.parts?.filter((part) => part.type === "text").map((part) => part.text ?? "").join("\n") ?? "";
+type SpectrumEvent = {
+  event?: string;
+  space?: { id?: string; platform?: string };
+  message?: SpectrumMessage;
+};
+
+function verifySpectrumSignature(rawBody: string, secret: string, signature: string, timestamp: string) {
+  if (!signature || !timestamp || !/^\d+$/.test(timestamp)) return false;
+  const sentAt = Number(timestamp);
+  if (!Number.isFinite(sentAt) || Math.abs(Date.now() / 1000 - sentAt) > 300) return false;
+  const expected = `v0=${createHmac("sha256", secret).update(`v0:${timestamp}:${rawBody}`).digest("hex")}`;
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function messageText(message: SpectrumMessage) {
+  if (message.content?.type === "text" && message.content.text) return message.content.text;
+  return message.content?.items?.filter((item) => item.type === "text").map((item) => item.text ?? "").join("\n") ?? "";
 }
 
 export async function POST(request: NextRequest) {
@@ -26,81 +42,81 @@ export async function POST(request: NextRequest) {
   if (!secret) return NextResponse.json({ error: "Photon webhook is not configured." }, { status: 503 });
 
   const rawBody = await request.text();
-  const headers = Object.fromEntries(request.headers.entries());
-  try {
-    new Webhook(secret).verify(rawBody, headers);
-  } catch {
+  const signature = request.headers.get("x-spectrum-signature") ?? "";
+  const timestamp = request.headers.get("x-spectrum-timestamp") ?? "";
+  if (!verifySpectrumSignature(rawBody, secret, signature, timestamp)) {
     return NextResponse.json({ error: "Invalid Photon signature." }, { status: 401 });
   }
 
-  let event: { id?: string; type?: string; data?: { object?: PhotonMessage } };
-  try { event = JSON.parse(rawBody); } catch {
+  let event: SpectrumEvent;
+  try { event = JSON.parse(rawBody) as SpectrumEvent; } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  if (event.type !== "message.received") return NextResponse.json({ received: true, ignored: true });
-  const message = event.data?.object;
-  if (!message?.id || !message.sentBy?.handle || !message.space?.id) {
+  if (event.event !== "messages") return NextResponse.json({ received: true, ignored: true });
+  const message = event.message;
+  const spaceId = event.space?.id ?? message?.space?.id;
+  const senderId = message?.sender?.id;
+  if (!message?.id || !spaceId || !senderId) {
     return NextResponse.json({ error: "Message event is missing sender, space, or message ID." }, { status: 400 });
   }
-  if (message.status && message.status !== "received") return NextResponse.json({ received: true, ignored: true });
+  if (message.direction !== "inbound") return NextResponse.json({ received: true, ignored: true });
 
-  const agentUserId = message.receivedBy?.id ?? getPhotonAgentUserId();\n  const body = messageText(message).trim();
+  const body = messageText(message).trim();
   if (!body) return NextResponse.json({ received: true, ignored: true });
 
   try {
-    const eventRows = await db<Array<{id:string}>>("pogo_webhook_events", {
+    const eventRows = await db<Array<{ id: string }>>("pogo_webhook_events", {
       method: "POST",
       body: {
         provider: "photon",
-        provider_event_id: event.id ?? message.id,
-        event_type: event.type,
+        provider_event_id: message.id,
+        event_type: event.event,
         payload: event
       },
       prefer: "return=representation,resolution=ignore-duplicates"
     });
     if (!eventRows?.length) return NextResponse.json({ received: true, duplicate: true });
 
-    const user = await findOrCreatePogoUser(
-      message.sentBy.handle,
-      message.sentBy.id ?? message.sentBy.handle,
-      message.platform ?? "imessage",
-      message.space.id
-    );
+    const platform = message.platform ?? event.space?.platform ?? "imessage";
+    const user = await findOrCreatePogoUser(senderId, senderId, platform, spaceId);
+    const agentUserId = getPhotonAgentUserId();
     await logMessage({
       userId: user.id,
       providerMessageId: message.id,
-      spaceId: message.space.id,
+      spaceId,
       direction: "inbound",
-      platform: message.platform ?? "imessage",
+      platform,
       body
     });
 
     if (/^cancel$/i.test(body)) {
-      const pending = await db<Array<{id:string}>>("pogo_approvals", {
+      const pending = await db<Array<{ id: string }>>("pogo_approvals", {
         query: `user_id=eq.${user.id}&status=eq.pending&select=id&order=created_at.desc&limit=1`
       });
       if (pending[0]) await db("pogo_approvals", {
-        method: "PATCH", query: `id=eq.${pending[0].id}`, body: { status: "rejected", decided_at: new Date().toISOString() }
+        method: "PATCH",
+        query: `id=eq.${pending[0].id}`,
+        body: { status: "rejected", decided_at: new Date().toISOString() }
       });
-      await sendPhotonText(message.space.id, agentUserId, "Got it. I cancelled that pending action.", message.id);
+      await sendPhotonText(spaceId, agentUserId, "Got it. I cancelled that pending action.", message.id);
       return NextResponse.json({ received: true });
     }
 
     if (/^approve$/i.test(body)) {
       const result = await approveLatestAction(user.id);
-      await sendPhotonText(message.space.id, agentUserId, result, message.id);
+      await sendPhotonText(spaceId, agentUserId, result, message.id);
       return NextResponse.json({ received: true, approval: "processed" });
     }
 
-    const reply = await runPogoAgent({ userId: user.id, message: body, phone: message.sentBy.handle });
-    const sent = await sendPhotonText(message.space.id, agentUserId, reply, message.id);
+    const reply = await runPogoAgent({ userId: user.id, message: body, phone: senderId });
+    const sent = await sendPhotonText(spaceId, agentUserId, reply, message.id);
     await logMessage({
       userId: user.id,
       providerMessageId: `pogo-${message.id}`,
-      spaceId: message.space.id,
+      spaceId,
       direction: "outbound",
-      platform: message.platform ?? "imessage",
+      platform,
       body: reply,
       status: "sent",
       metadata: { photon: sent }
