@@ -86,7 +86,7 @@ async function listSubscriptions() {
   ).join("\n");
 }
 async function draftRefund(chatId: number, sessionId: string) {
-  if (!/^cs_(live|test)_[A-Za-z0-9_]+$/.test(sessionId)) {
+  if (!/^cs_live_[A-Za-z0-9_]+$/.test(sessionId)) {
     await send(chatId, "send a valid checkout session id, like <code>cs_live_...</code>. i won't guess which payment you mean.");
     return;
   }
@@ -114,12 +114,21 @@ async function completeRefund(chatId: number, actionId: string, confirm: boolean
     return "that confirmation expired. create a fresh refund request if you still need it.";
   }
   if (!confirm) {
-    await db("pogo_admin_actions", { method: "PATCH", query: `id=eq.${actionId}`, body: { status: "cancelled" } });
-    return "refund cancelled. nothing was sent to handypay.";
+    const cancelled = await db<Array<{id:string}>>("pogo_admin_actions", {
+      method: "PATCH",
+      query: `id=eq.${actionId}&telegram_chat_id=eq.${chatId}&status=eq.pending&select=id`,
+      body: { status: "cancelled" }
+    });
+    return cancelled.length ? "refund cancelled. nothing was sent to handypay." : "that refund request was already handled.";
   }
   const key = process.env.HANDYPAY_LIVE_API_KEY;
   if (!key) return "handypay live api key is not configured.";
-  await db("pogo_admin_actions", { method: "PATCH", query: `id=eq.${actionId}`, body: { status: "confirmed" } });
+  const claimed = await db<Array<{id:string}>>("pogo_admin_actions", {
+    method: "PATCH",
+    query: `id=eq.${actionId}&telegram_chat_id=eq.${chatId}&status=eq.pending&select=id`,
+    body: { status: "confirmed" }
+  });
+  if (!claimed.length) return "that refund request was already handled. i won't submit it twice.";
   const response = await fetch("https://api.handypay.me/api/v1/refunds", {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
