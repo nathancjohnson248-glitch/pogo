@@ -8,9 +8,9 @@ export const maxDuration = 30;
 
 type TgUser = { id: number; username?: string; first_name?: string };
 type TgChat = { id: number; type?: string };
-type TgMessage = { message_id: number; chat: TgChat; from?: TgUser; text?: string };
+type TgSticker = { file_id: string; emoji?: string; set_name?: string; is_animated?: boolean; is_video?: boolean };\ntype TgMessage = { message_id: number; chat: TgChat; from?: TgUser; text?: string; caption?: string; sticker?: TgSticker; photo?: Array<{file_id:string}>; video?: {file_id:string}; animation?: {file_id:string}; document?: {file_id:string;mime_type?:string}; voice?: {file_id:string;duration:number}; audio?: {file_id:string;duration:number}; };\ntype TgReactionUpdate = { chat: TgChat; user?: TgUser; actor_chat?: TgChat; message_id:number; old_reaction?:Array<{type:string;emoji?:string}>; new_reaction?:Array<{type:string;emoji?:string}> };
 type TgCallback = { id: string; from: TgUser; data?: string; message?: TgMessage };
-type TgUpdate = { update_id: number; message?: TgMessage; callback_query?: TgCallback };
+type TgUpdate = { update_id: number; message?: TgMessage; callback_query?: TgCallback; message_reaction?: TgReactionUpdate };
 
 function safeEqual(a: string, b: string) {
   const left = Buffer.from(a);
@@ -26,7 +26,7 @@ function money(amount: unknown, currency: unknown) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: String(currency ?? "USD").toUpperCase() }).format(n / 100);
 }
 async function tg(method: string, body: Record<string, unknown>) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = process.env.TELEGRAM_BOT_TOKEN ?? process.env.TELEGRAM_BOT_API;
   if (!token) throw new Error("telegram bot token is not configured");
   const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), cache: "no-store"
@@ -158,7 +158,7 @@ async function askPogo(question: string) {
 async function handleMessage(message: TgMessage) {
   const chatId = message.chat.id;
   const user = message.from;
-  const text = (message.text ?? "").trim();
+  const mediaNote = message.sticker ? `\n[sticker${message.sticker.emoji ? ` ${message.sticker.emoji}` : ""}${message.sticker.set_name ? ` from ${message.sticker.set_name}` : ""}${message.sticker.is_animated ? ", animated" : message.sticker.is_video ? ", video sticker" : ""}]` : message.photo ? "\n[photo attached]" : message.video ? "\n[video attached]" : message.animation ? "\n[animation attached]" : message.voice ? `\n[voice note, ${message.voice.duration}s]` : message.audio ? `\n[audio attached, ${message.audio.duration}s]` : message.document ? `\n[file attached${message.document.mime_type ? `, ${message.document.mime_type}` : ""}]` : "";\n  const text = (message.text ?? message.caption ?? "").trim() + mediaNote;
   if (!user || message.chat.type !== "private") return;
   if (text.startsWith("/claim ")) {
     const token = text.slice(7).trim();
@@ -235,14 +235,14 @@ export async function GET(request: NextRequest) {
   const key = request.nextUrl.searchParams.get("key") ?? "";
   const expected = process.env.POGO_ADMIN_SETUP_TOKEN ?? "";
   if (!expected || !safeEqual(key, expected)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_WEBHOOK_SECRET) {
+  if (!(process.env.TELEGRAM_BOT_TOKEN ?? process.env.TELEGRAM_BOT_API) || !process.env.TELEGRAM_WEBHOOK_SECRET) {
     return NextResponse.json({ error: "add TELEGRAM_BOT_TOKEN to Railway first" }, { status: 503 });
   }
   try {
     const result = await tg("setWebhook", {
       url: "https://heypogo.xyz/api/webhooks/telegram",
       secret_token: process.env.TELEGRAM_WEBHOOK_SECRET,
-      allowed_updates: ["message", "callback_query"],
+      allowed_updates: ["message", "callback_query", "message_reaction"],
       drop_pending_updates: false
     });
     return NextResponse.json({ ok: true, webhook: result, next: "open your bot and send /claim with the owner setup token" });
